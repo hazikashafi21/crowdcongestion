@@ -22,8 +22,7 @@ Example: 10 m x 4 m bridge = 40 m2, red limit 160. 120 people with +20/min net r
 ## API
 GET /api/zones, GET /api/alerts, POST /api/count {zone, count}, POST /api/simulate/surge, POST /api/simulate/relief
 
-## SMS alerts (optional)
-`pip install twilio` and set TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, ALERT_TO. Red alerts are then sent by SMS.
+
 
 ## Limits
 Prototype. Camera counts need per-site calibration; zone areas and thresholds should be set with local safety authorities. Dense crowds need a density-map model instead of YOLO.
