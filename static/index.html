@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crowd Safety Monitor</title>
+<style>
+:root{--bg:#0e1613;--panel:#16211d;--line:#26352f;--ink:#e6eee9;--mute:#8fa39a;--g:#3fcf7a;--y:#f2b632;--r:#ff5a47}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 8px}.mute{color:var(--mute);font-size:13px}
+#banner{padding:16px 18px;border-radius:8px;font-size:24px;font-weight:800;background:var(--g);color:#06150d;margin-bottom:12px}
+#banner.YELLOW{background:var(--y);color:#201600}#banner.RED{background:var(--r);color:#2a0600}
+#banner small{display:block;font-size:14px;font-weight:500}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px}.stat b{display:block;font-size:26px}
+.cols{display:grid;grid-template-columns:1.4fr 1fr;gap:12px}@media(max-width:800px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+#map{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"e b x" "g g g";gap:8px}
+.tile{border-radius:6px;padding:10px;border:2px solid var(--g);background:rgba(63,207,122,.12)}
+.tile.YELLOW{border-color:var(--y);background:rgba(242,182,50,.14)}
+.tile.RED{border-color:var(--r);background:rgba(255,90,71,.22);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{background:rgba(255,90,71,.4)}}
+@media(prefers-reduced-motion:reduce){.tile.RED{animation:none}}
+.tile .n{font-weight:700}.tile .d{font-size:30px;font-weight:800;line-height:1.1}.tile small{color:var(--mute)}
+svg.sp{width:100%;height:44px;margin-top:6px}
+.act{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}.act:last-child{border:0}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:7px;flex:none}
+ul{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}li{padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}.lv{font-weight:700}
+button{font:inherit;font-weight:600;border:1px solid var(--mute);background:none;color:var(--ink);border-radius:6px;padding:7px 12px;margin:0 8px 6px 0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--y);outline-offset:2px}
+</style></head><body><main>
+<header><h1>Crowd Safety Monitor</h1><span class="mute" id="upd">Connecting…</span></header>
+<div id="banner" class="YELLOW">Connecting to backend…</div>
+<div class="stats">
+ <div class="stat"><b id="tot">0</b><span class="mute">people in all zones</span></div>
+ <div class="stat"><b id="nred" style="color:var(--r)">0</b><span class="mute">zones in red</span></div>
+ <div class="stat"><b id="nyel" style="color:var(--y)">0</b><span class="mute">zones in yellow</span></div>
+</div>
+<div class="cols">
+ <div>
+  <div class="panel"><h2>Venue map</h2><div id="map"></div>
+   <p class="mute" style="margin:8px 0 0">Line graph: density over the last 2 minutes. Dashed lines mark 2 and 4 people per m².</p></div>
+  <div class="panel"><h2>Demo controls</h2>
+   <button id="surge">Simulate surge on the bridge</button><button id="relief">Relieve all zones</button>
+   <label class="mute"><input type="checkbox" id="snd"> Sound alert when a zone turns red</label></div>
+ </div>
+ <div>
+  <div class="panel"><h2>Recommended actions</h2><div id="acts"></div></div>
+  <div class="panel"><h2>Alerts to control room</h2><ul id="log"></ul></div>
+ </div>
+</div>
+</main>
+<script>
+const C={GREEN:"var(--g)",YELLOW:"var(--y)",RED:"var(--r)","EARLY WARNING":"var(--y)"};
+const areas={"Main Entrance":"e",Bridge:"b","Exit B":"x","Bathing Ghat":"g"};
+const hist={},prev={};let audio=null;const $=id=>document.getElementById(id);
+function beep(){if(!audio||!$("snd").checked)return;const o=audio.createOscillator(),g=audio.createGain();
+ o.frequency.value=880;g.gain.value=.15;o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.4)}
+$("snd").onchange=e=>{if(e.target.checked&&!audio)audio=new(window.AudioContext||window.webkitAudioContext)()};
+const Y=t=>36-t/6*34;
+function spark(h){
+ const pts=h.map((v,i)=>`${i/Math.max(h.length-1,1)*120},${Y(Math.min(v,6))}`).join(" ");
+ const ln=(t,c)=>`<line x1="0" x2="120" y1="${Y(t)}" y2="${Y(t)}" stroke="${c}" stroke-dasharray="3" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+ return `<svg class="sp" viewBox="0 0 120 36" preserveAspectRatio="none">${ln(2,"var(--y)")}${ln(4,"var(--r)")}<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`}
+function render(z,a){
+ z.forEach(x=>{const h=hist[x.zone]=hist[x.zone]||[];h.push(x.density);if(h.length>60)h.shift();
+  if(x.status==="RED"&&prev[x.zone]!=="RED")beep();prev[x.zone]=x.status});
+ const red=z.filter(x=>x.status==="RED"),yel=z.filter(x=>x.status==="YELLOW");
+ const w=red.length?"RED":yel.length?"YELLOW":"GREEN",b=$("banner");b.className=w;
+ b.innerHTML=(w==="RED"?"Act now: "+red.map(x=>x.zone).join(", "):w==="YELLOW"?"Watch closely: "+yel.map(x=>x.zone).join(", "):"All zones safe")
+  +`<small>${w==="GREEN"?"No zone is above 2 people per m²":"Follow the recommended actions"}</small>`;
+ $("tot").textContent=z.reduce((s,x)=>s+x.count,0);$("nred").textContent=red.length;$("nyel").textContent=yel.length;
+ $("map").innerHTML=z.map(x=>`<div class="tile ${x.status}" style="grid-area:${areas[x.zone]}"><div class="n">${x.zone}</div>
+  <div class="d">${x.density.toFixed(1)} <small>/m²</small></div><small>${x.count} people · ${x.area} m² · ${x.source}</small>${spark(hist[x.zone])}</div>`).join("");
+ const todo=z.filter(x=>x.status!=="GREEN").sort((p,q)=>(q.status==="RED")-(p.status==="RED"));
+ $("acts").innerHTML=todo.length?todo.map(x=>`<div class="act"><span class="dot" style="background:${C[x.status]}"></span><div><b>${x.zone}</b>: ${x.action}<br>
+  <span class="mute">${x.density.toFixed(1)}/m² · net ${x.net_per_min>=0?"+":""}${x.net_per_min}/min${x.eta!=null&&x.status!=="RED"?` · red in ~${x.eta} min`:""}</span></div></div>`).join(""):'<div class="mute">Nothing to do right now.</div>';
+ $("log").innerHTML=a.length?a.map(r=>`<li><span class="mute">${r.ts}</span> <span class="lv" style="color:${C[r.level]||"var(--ink)"}">${r.level}</span> ${r.message}</li>`).join(""):'<li class="mute">No alerts yet.</li>';
+ $("upd").textContent="Updated "+new Date().toLocaleTimeString();
+}
+async function load(){
+ try{render(await (await fetch("/api/zones")).json(),await (await fetch("/api/alerts")).json())}
+ catch(e){const b=$("banner");b.className="YELLOW";b.textContent="Cannot reach the backend. Start it with: python -m uvicorn app:app --reload"}
+}
+const post=u=>fetch(u,{method:"POST"});
+$("surge").onclick=()=>post("/api/simulate/surge");$("relief").onclick=()=>post("/api/simulate/relief");
+load();setInterval(load,2000);
+</script></body></html>

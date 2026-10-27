@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crowd Safety Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1ee;--card:#fff;--ink:#14231f;--mute:#5d6b66;--line:#d5dcd8;--g:#1f8a4c;--y:#c98a00;--r:#c8321f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a17;--card:#17251f;--ink:#e8f0ec;--mute:#93a39c;--line:#2a3b34;--g:#3fcf7a;--y:#f2b632;--r:#ff6b57}}
+:root[data-theme="dark"]{--bg:#0f1a17;--card:#17251f;--ink:#e8f0ec;--mute:#93a39c;--line:#2a3b34;--g:#3fcf7a;--y:#f2b632;--r:#ff6b57}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.5 "Public Sans",system-ui,sans-serif}
+main{max-width:980px;margin:auto;padding:20px 16px 40px}
+h1{font-size:26px;font-weight:800;margin:0}p.sub{color:var(--mute);margin:4px 0 18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-left:8px solid var(--g);border-radius:6px;padding:14px}
+.card.YELLOW{border-left-color:var(--y)}.card.RED{border-left-color:var(--r)}
+.top{display:flex;justify-content:space-between;align-items:baseline}.top b{font-size:17px}
+.badge{font-weight:800;font-size:13px;color:var(--g)}.YELLOW .badge{color:var(--y)}.RED .badge{color:var(--r)}
+.big{font-size:38px;font-weight:800;line-height:1.1;margin:6px 0 0}.big small{font-size:14px;font-weight:400;color:var(--mute)}
+.bar{height:8px;background:var(--line);border-radius:4px;margin:10px 0;overflow:hidden}.bar i{display:block;height:100%;background:var(--g)}
+.YELLOW .bar i{background:var(--y)}.RED .bar i{background:var(--r)}
+.meta{color:var(--mute);font-size:13px}.act{margin-top:8px;font-weight:600}
+button{font:inherit;font-weight:600;border:1px solid var(--ink);background:none;color:var(--ink);border-radius:6px;padding:8px 12px;margin:14px 8px 0 0;cursor:pointer}
+button:focus-visible{outline:3px solid var(--y);outline-offset:2px}
+h2{font-size:17px;margin:22px 0 8px}#log{background:var(--card);border:1px solid var(--line);border-radius:6px;max-height:220px;overflow:auto;padding:4px 12px;margin:0;list-style:none}
+#log li{padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}#log li:last-child{border:0}
+</style></head><body><main>
+<h1>Crowd Safety Monitor</h1>
+<p class="sub">Live density per zone. Simulated camera counts update every 2 seconds. Red means act now.</p>
+<div class="grid" id="grid"></div>
+<button id="surge">Simulate surge on the bridge</button><button id="relief">Relieve all zones</button>
+<h2>Alerts to control room</h2><ul id="log"><li class="meta">No alerts yet.</li></ul>
+</main>
+<script>
+const YEL=2,RED=4;
+const Z=[
+ {n:"Bridge",l:10,w:4,a:"Stop entry at bridge head; allow one-way flow"},
+ {n:"Main Entrance",l:12,w:6,a:"Open extra gate; slow entry with barriers"},
+ {n:"Exit B",l:8,w:5,a:"Clear exit path; redirect crowd from Exit A"},
+ {n:"Bathing Ghat",l:20,w:10,a:"Limit bathers; deploy rescue boats and volunteers"}];
+Z.forEach(z=>{z.area=z.l*z.w;z.c=Math.round(z.area*(0.5+Math.random()*0.8));z.net=[];z.s="GREEN";z.surge=0});
+const risk=d=>d<YEL?"GREEN":d<RED?"YELLOW":"RED";
+const log=document.getElementById("log");let first=true;
+function alertMsg(z,s,d,eta){
+  if(first){log.innerHTML="";first=false}
+  const li=document.createElement("li"),t=new Date().toLocaleTimeString();
+  li.textContent=`${t}  ${s}: ${z.n} at ${d.toFixed(1)} people/m². ${z.a}`+(eta!=null?` (red in about ${eta.toFixed(1)} min)`:"");
+  log.prepend(li);
+}
+function tick(){
+  Z.forEach(z=>{
+    const inn=Math.round(Math.random()*10+z.surge),out=Math.round(Math.random()*10+4);
+    z.c=Math.max(0,z.c+inn-out);z.net.push(inn-out);if(z.net.length>3)z.net.shift();
+  });render();
+}
+function render(){
+  const g=document.getElementById("grid");g.innerHTML="";
+  Z.forEach(z=>{
+    const d=z.c/z.area,s=risk(d),lim=RED*z.area;
+    const net=z.net.reduce((a,b)=>a+b,0)/(z.net.length||1)*30;   // per minute (tick = 2 s)
+    const eta=s!=="RED"&&net>0?(lim-z.c)/net:null;
+    if(s!==z.s&&s!=="GREEN")alertMsg(z,s,d,eta);
+    else if(s==="GREEN"&&eta!=null&&eta<=3&&!z.warned){z.warned=true;alertMsg(z,"EARLY WARNING",d,eta)}
+    if(eta==null||eta>3)z.warned=false;
+    z.s=s;
+    const e=document.createElement("div");e.className="card "+s;
+    e.innerHTML=`<div class="top"><b>${z.n}</b><span class="badge">${s}</span></div>
+    <div class="big">${d.toFixed(1)} <small>people/m²</small></div>
+    <div class="bar"><i style="width:${Math.min(100,d/6*100)}%"></i></div>
+    <div class="meta">${z.c} people in ${z.area} m² · net ${net>=0?"+":""}${net.toFixed(0)}/min${eta!=null?` · red in ~${eta.toFixed(1)} min`:""}</div>
+    ${s!=="GREEN"?`<div class="act">${z.a}</div>`:""}`;
+    g.appendChild(e);
+  });
+}
+document.getElementById("surge").onclick=()=>{Z[0].surge=25};
+document.getElementById("relief").onclick=()=>{Z.forEach(z=>{z.surge=0;z.c=Math.round(z.area*0.8)})};
+render();setInterval(tick,2000);
+</script></body></html>
