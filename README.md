@@ -1,3 +1,4 @@
+
 # Crowd Safety Monitor
 
 Estimates crowd density per zone (bridges, entrances, exits, bathing areas), flags overcrowding, predicts when a zone will turn red, and alerts authorities.
@@ -26,3 +27,4 @@ GET /api/zones, GET /api/alerts, POST /api/count {zone, count}, POST /api/simula
 
 ## Limits
 Prototype. Camera counts need per-site calibration; zone areas and thresholds should be set with local safety authorities. Dense crowds need a density-map model instead of YOLO.
+
